@@ -1,0 +1,33 @@
+<html>
+  <head>
+    <style>
+      img {
+        margin: 5px;
+      }
+      body {
+        font-size:25px;
+        color:#fff;
+        background-color:#000;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    Select a background<br>
+    <div id="images"></div>  
+  </body>
+  <script>
+    // Background locations
+    const locations = ["kahala", "lasvegas", "missionbeach", "bangkok", "hollywood", "chulavista"];
+    // Show thumbnails linked to selfie app
+    const images = document.getElementById('images');
+    for (i = 0; i < locations.length; i++) {
+      let img = document.createElement('img');
+      img.src = `./img/${locations[i]}_thumb.jpg`;
+      let a = document.createElement('a');
+      a.href = `./app.html?${locations[i]}`;
+      a.appendChild(img);
+      images.appendChild(a);
+    }
+  </script>
+</html>

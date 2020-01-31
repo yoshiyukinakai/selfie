@@ -1,0 +1,157 @@
+<html>
+  <head>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.0"></script>
+    <style>
+      body {
+        font-size:25px;
+        color:#fff;
+        background-color:#000;
+        text-align: center;
+      }
+      button {
+        display: none;
+        margin: 10px;
+        font-size:30px;
+        border-radius: 15px;
+        color: #fff;
+        height: 60px;
+      }
+      #start {
+        background-color: #0a0;
+      }
+      #stop {
+        background-color: #a00;
+      }
+    </style>
+  </head>
+  <body onload="init()">
+    Processing image on device without sending it to remote servers<br>
+    <video id="camera" playsinline></video><br>
+    <button id="start" onclick="main()">START</button> 
+    <button id="stop" onclick="stop()">STOP</button><br>
+    <div id="message"></div>
+    <div id="images"></div>
+  </body>
+  <script>
+    let timerID;        // ID number of timer for repeating main function
+    let background;     // Image object of background image
+    let video;          // Video object of camera on device
+    let imageUrls = []; // URL strings of generated images
+
+    /* Load background and start up camera */
+    async function init() {
+      background = await loadBackground();
+      background.onload = async function(){
+        video = await startUpCamera();
+        // Start main function
+        setTimeout(main, 2000);
+      }
+    }
+
+    /* Repeat main process */
+    async function main() {
+      const imageUrl = await replaceBackground();
+      if( imageUrl !== undefined){
+        await addNewImage(imageUrl);
+      }
+      timerID = setTimeout(main, 3000);
+      // Show stop button
+      document.getElementById("start").style.display = "none";
+      document.getElementById("stop").style.display = "inline";
+    }
+
+    /* Stop processing */
+    async function stop() {
+      document.getElementById("message").innerHTML = "";
+      clearTimeout(timerID);
+      // Show start button
+      document.getElementById("start").style.display = "inline";
+      document.getElementById("stop").style.display = "none";
+    }
+
+    /* Load background image from file */
+    async function loadBackground() {
+      document.getElementById("message").innerHTML = "Loading background ...";
+      const background = document.createElement('img');
+      const location = window.location.href.match(/[?]+([^=&]+)/)[1];
+      background.src = `./img/${location}.jpg`
+      return background;
+    }
+
+    /* Start up camera on device */
+    async function startUpCamera() {
+      document.getElementById("message").innerHTML = "Starting up camera ...";
+      const video = document.getElementById('camera');
+      video.width = 350;
+      const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+      video.srcObject = stream;
+      video.play();
+      return video;
+    }
+
+    /* Replace background of camera image */
+    async function replaceBackground() {
+      // Canvas for processing image
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = background.width;
+      canvas.height = background.height;
+      await ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // If canvas is ready
+      if(canvas.width > 0){
+        // Convert camera image to ImageData object
+        const scale = canvas.height/video.videoHeight;
+        await ctx.drawImage(video, (canvas.width - scale * video.videoWidth)/2, 0, scale * video.videoWidth, canvas.height);
+        const cameraImage = await ctx.getImageData(0, 0, canvas.width, canvas.height);
+        // Segment persons by BodyPix
+        document.getElementById("message").innerHTML = "Segmenting persons ...";
+        const net = await bodyPix.load();
+        const segmentations = await net.segmentMultiPerson(cameraImage);
+        // If any person segment is found
+        if(segmentations.length > 0){
+          document.getElementById("message").innerHTML = "";
+          // Make all pixels transparent 
+          for (let i = 0; i < segmentations[0].data.length; i++){
+            cameraImage.data[i * 4 + 3] = 0; // Set alpha value to 0 (data consists of RGBA values)
+          }
+          // For each segmentated pixel
+          for (let i = 0; i < segmentations.length; i++) {
+            for (let j = 0; j < segmentations[i].data.length; j++){
+              if (segmentations[i].data[j] === 1) {
+                cameraImage.data[j * 4 + 3] = 255; // Make the pixel opacity
+              }
+            }
+          }
+          // Draw persons with new background
+          ctx.putImageData(cameraImage, (background.width - cameraImage.width) / 2, background.height - cameraImage.height);
+          ctx.globalCompositeOperation = 'destination-over';
+          ctx.drawImage(background, 0, 0);
+          return canvas.toDataURL();
+        }
+        // If no person segment is found
+        else {
+          document.getElementById("message").innerHTML = "Unable to segment ...";
+        }
+      }
+    }
+
+    /* Add new image to top */
+    async function addNewImage(imageUrl) {
+      // Add new image
+      imageUrls.unshift(imageUrl);
+      const images = document.getElementById('images');
+      // Remove oldest image
+      if(imageUrls.length > 8) {
+        imageUrls.pop();
+      }
+      images.innerHTML = "";
+      for (let i = 0; i < imageUrls.length; i++) {
+        const img = document.createElement('img');
+        img.src = imageUrls[i];
+        img.width = 350;
+        images.appendChild(img);
+      }
+    }
+  </script>
+</html>
