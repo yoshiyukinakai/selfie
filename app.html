@@ -23,13 +23,16 @@
       #stop {
         background-color: #a00;
       }
+      #flip {
+        background-color: #aaa;
+      }
     </style>
   </head>
   <body onload="init()">
-    Processing image on device without sending it to remote servers<br>
     <video id="camera" playsinline></video><br>
     <button id="start" onclick="main()">START</button> 
-    <button id="stop" onclick="stop()">STOP</button><br>
+    <button id="stop" onclick="stop()">STOP</button>
+    <button id="flip" onclick="changeFacingMode()">Flip</button><br>
     <div id="message"></div>
     <div id="images"></div>
   </body>
@@ -37,15 +40,19 @@
     let timerID;        // ID number of timer for repeating main function
     let background;     // Image object of background image
     let video;          // Video object of camera on device
+    let mode;           // Facing-mode "user" or {exact: "environment"}
     let imageUrls = []; // URL strings of generated images
 
     /* Load background and start up camera */
     async function init() {
       background = await loadBackground();
       background.onload = async function(){
-        video = await startUpCamera();
-        // Start main function
-        setTimeout(main, 2000);
+        mode = "user";
+        video = await startUpCamera(); 
+        // Show start and flip buttons
+        document.getElementById("start").style.display = "inline";
+        document.getElementById("stop").style.display = "none";
+        document.getElementById("flip").style.display = "inline";
       }
     }
 
@@ -70,6 +77,30 @@
       document.getElementById("stop").style.display = "none";
     }
 
+    /* Change camera facing-mode */
+    async function changeFacingMode() {
+      // Stop main process and existing video stream
+      await stop();
+      let stream = video.srcObject;
+      let tracks = stream.getTracks();
+      tracks.forEach(function(track) {
+        track.stop();
+      });
+      video.srcObject = null;
+      // Start up camera with another facing-mode
+      if(mode === "user") {
+        mode = {exact: "environment"};
+      } else {
+        mode = "user";
+      }
+      try {
+        video = await startUpCamera();
+      } catch(e) { // If only having user-facing camera
+        mode = "user";
+        video = await startUpCamera();
+      }
+    }
+
     /* Load background image from file */
     async function loadBackground() {
       document.getElementById("message").innerHTML = "Loading background ...";
@@ -84,9 +115,13 @@
       document.getElementById("message").innerHTML = "Starting up camera ...";
       const video = document.getElementById('camera');
       video.width = 350;
-      const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {facingMode: mode},
+        audio: false
+      });
       video.srcObject = stream;
       video.play();
+      document.getElementById("message").innerHTML = "";
       return video;
     }
 
